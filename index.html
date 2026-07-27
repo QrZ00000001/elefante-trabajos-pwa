@@ -112,6 +112,19 @@
         </footer>
     </div>
 
+    <section id="voice-dialog" class="voice-dialog" aria-modal="true" aria-labelledby="voice-dialog-title" role="dialog" hidden>
+        <div class="voice-dialog-card">
+            <p class="voice-eyebrow">INGRESO POR VOZ</p>
+            <h2 id="voice-dialog-title">Revisa antes de agregar</h2>
+            <p id="voice-transcript" class="voice-transcript">Escuchando…</p>
+            <div id="voice-preview" class="voice-preview" aria-live="polite"></div>
+            <div class="voice-dialog-actions">
+                <button id="btn-voice-cancel" class="btn-secondary" type="button">Cancelar</button>
+                <button id="btn-voice-confirm" class="btn-primary" type="button" disabled>Confirmar y agregar</button>
+            </div>
+        </div>
+    </section>
+
     <script src="main.js"></script>
     <script>
         // Registrar Service Worker para PWA

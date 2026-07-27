@@ -50,7 +50,7 @@ function leerTrabajos_() {
   filas.slice(1).forEach(fila => {
     if (!fila[0]) return;
     const trabajo = {
-      id: String(fila[0]), fecha: String(fila[2] || ''), cliente: String(fila[3] || ''),
+      id: String(fila[0]), fecha: fechaTexto_(fila[2]), cliente: String(fila[3] || ''),
       trabajo: String(fila[4] || ''), cantidad: String(fila[6] || ''), entregado: fila[11] === true
     };
     if (fila[1] === 'digital') {
@@ -66,6 +66,13 @@ function leerTrabajos_() {
     }
   });
   return trabajos;
+}
+
+function fechaTexto_(valor) {
+  if (valor instanceof Date) {
+    return Utilities.formatDate(valor, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return String(valor || '');
 }
 
 function guardarTrabajo_(tipo, trabajo) {

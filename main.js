@@ -111,15 +111,26 @@ async function syncPendingChanges(silent = false) {
     }
 }
 
+const MONTH_NAMES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+
 function dateObject(value) {
     if (!value) return null;
+    if (value instanceof Date) return value;
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T00:00:00`);
     const match = String(value).match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-    return match ? new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1])) : null;
+    if (match) return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+    const namedMonth = String(value).trim().toUpperCase().match(/^(\d{1,2})\s+(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)\s+(\d{4})$/);
+    if (namedMonth) return new Date(Number(namedMonth[3]), MONTH_NAMES.indexOf(namedMonth[2]), Number(namedMonth[1]));
+    const nativeDate = new Date(value);
+    return Number.isNaN(nativeDate) ? null : nativeDate;
 }
 function dateKey(value) {
     const date = dateObject(value);
-    return date && !Number.isNaN(date) ? date.toISOString().slice(0, 10) : '';
+    return date && !Number.isNaN(date) ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : '';
+}
+function displayDate(value) {
+    const date = dateObject(value);
+    return date && !Number.isNaN(date) ? `${date.getDate()} ${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}` : String(value || '');
 }
 function monthKey(value) { return dateKey(value).slice(0, 7); }
 function statusOf(job) {
@@ -196,7 +207,7 @@ function renderTable() {
         const badge = `<span class="status-badge status-${status}">${statusLabel(status)}</span>`;
         if (tab === 'plotter') {
             tr.innerHTML = `
-                <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'fecha', this.innerText)">${escapeHtml(job.fecha)}</div></td>
+                <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'fecha', this.innerText)">${escapeHtml(displayDate(job.fecha))}</div></td>
                 <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'cliente', this.innerText)">${escapeHtml(job.cliente)}</div></td>
                 <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'trabajo', this.innerText)">${escapeHtml(job.trabajo)}</div></td>
                 <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'medida', this.innerText)">${escapeHtml(job.medida)}</div></td>
@@ -218,7 +229,7 @@ function renderTable() {
                 <td>${badge}<button class="btn-icon" title="Eliminar trabajo" onclick="deleteRow('${tab}', ${index})">🗑</button></td>`;
         } else {
             tr.innerHTML = `
-                <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'fecha', this.innerText)">${escapeHtml(job.fecha)}</div></td>
+                <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'fecha', this.innerText)">${escapeHtml(displayDate(job.fecha))}</div></td>
                 <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'cliente', this.innerText)">${escapeHtml(job.cliente)}</div></td>
                 <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'trabajo', this.innerText)">${escapeHtml(job.trabajo)}</div></td>
                 <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'formato', this.innerText)">${escapeHtml(job.formato)}</div></td>
@@ -236,7 +247,12 @@ function renderTable() {
 }
 
 function newId() { return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`; }
-window.updateField = (tab, index, field, value) => { const job = state.jobs[tab][index]; job[field] = value.trim(); queueUpsert(tab, job); renderTable(); };
+window.updateField = (tab, index, field, value) => {
+    const job = state.jobs[tab][index];
+    const cleanValue = value.trim();
+    job[field] = field === 'fecha' ? (dateKey(cleanValue) || cleanValue) : cleanValue;
+    queueUpsert(tab, job); renderTable();
+};
 window.toggleCheck = (tab, index, field) => { const job = state.jobs[tab][index]; job[field] = !job[field]; queueUpsert(tab, job); renderTable(); };
 window.deleteRow = (tab, index) => {
     const job = state.jobs[tab][index];
@@ -260,20 +276,140 @@ btnAdd.addEventListener('click', () => {
 btnSync.addEventListener('click', () => syncPendingChanges(false));
 
 const btnVoice = document.getElementById('btn-voice');
+const voiceDialog = document.getElementById('voice-dialog');
+const voiceTranscript = document.getElementById('voice-transcript');
+const voicePreview = document.getElementById('voice-preview');
+const btnVoiceConfirm = document.getElementById('btn-voice-confirm');
+const btnVoiceCancel = document.getElementById('btn-voice-cancel');
+let pendingVoiceJob = null;
+let voiceRecognition = null;
+
+function normalizeVoiceText(text) {
+    return text.toLocaleLowerCase('es-CL').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\bmas\b/g, '+');
+}
+
+function dateFromVoice(text) {
+    if (/\b(hoy|dia hoy)\b/.test(text)) return dateKey(new Date());
+    const match = text.match(/(?:dia|fecha)\s*(\d{1,2})\s*(?:de\s*)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s*(?:de\s*)?(\d{4})/);
+    return match ? dateKey(new Date(Number(match[3]), MONTH_NAMES.map(month => month.toLocaleLowerCase('es-CL')).indexOf(match[2]), Number(match[1]))) : dateKey(new Date());
+}
+
+function terminationFromVoice(text) {
+    const blanco = text.includes('blanco');
+    const barniz = text.includes('barniz');
+    const medioCorte = text.includes('medio corte');
+    const dobleCorte = text.includes('doble corte');
+    if (blanco && barniz && medioCorte) return 'BLANCO + BARNIZ + MEDIO CORTE';
+    if (blanco && barniz && dobleCorte) return 'BLANCO + BARNIZ + DOBLE CORTE';
+    if (blanco && barniz) return 'BLANCO + BARNIZ';
+    if (blanco && medioCorte) return 'BLANCO + MEDIO CORTE';
+    if (blanco && dobleCorte) return 'BLANCO + DOBLE CORTE';
+    if (blanco) return 'BLANCO';
+    if (barniz && medioCorte) return 'BARNIZ + MEDIO CORTE';
+    if (barniz && dobleCorte) return 'BARNIZ + DOBLE CORTE';
+    return 'BARNIZ';
+}
+
+function voiceField(text, field, nextFields) {
+    const next = nextFields.join('|');
+    const expression = new RegExp(`${field}\\s*,?\\s*(.+?)(?=\\s*,?\\s*(?:${next})\\b|$)`, 'i');
+    return text.match(expression)?.[1]?.trim() || '';
+}
+
+function parseVoiceJob(transcript) {
+    const text = normalizeVoiceText(transcript);
+    const client = voiceField(text, 'cliente', ['trabajo', 'medida', 'terminacion', 'cantidad']) || 'VOZ (REVISAR)';
+    const work = voiceField(text, 'trabajo', ['medida', 'terminacion', 'cantidad']) || 'INGRESADO POR VOZ';
+    const measure = text.match(/medida\s*,?\s*(\d+(?:[.,]\d+)?\s*(?:x|por)\s*\d+(?:[.,]\d+)?)/i)?.[1]?.replace(/\s*(?:x|por)\s*/i, ' x ') || '-';
+    const quantityMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(metros?\s*cuadrados?|m2|m²|pliegos?|unidades?)/i);
+    const quantity = quantityMatch?.[1] || '1';
+    const unitSpoken = quantityMatch?.[2] || '';
+    const unit = /metro|m2|m²/i.test(unitSpoken) ? 'm²' : /pliego/i.test(unitSpoken) ? 'Pliegos' : 'Unidades';
+    return { fecha: dateFromVoice(text), cliente: client.toUpperCase(), trabajo: work.toUpperCase(), medida: measure.toUpperCase(), cantidad, unidad: unit, terminacion: terminationFromVoice(text) };
+}
+
+function highlightTranscript(transcript) {
+    let html = escapeHtml(transcript);
+    const patterns = [
+        ['voice-date', /(\b(?:d[ií]a\s+)?hoy\b)/gi],
+        ['voice-client', /(cliente\s+[^,]+?)(?=,?\s*(?:trabajo|medida|terminaci[oó]n|cantidad)\b|$)/gi],
+        ['voice-work', /(trabajo\s*,?\s*[^,]+?)(?=,?\s*(?:medida|terminaci[oó]n|cantidad)\b|$)/gi],
+        ['voice-measure', /(medida\s*,?\s*\d+(?:[.,]\d+)?\s*(?:x|por)\s*\d+(?:[.,]\d+)?)/gi],
+        ['voice-quantity', /(\d+(?:[.,]\d+)?\s*(?:metros?\s*cuadrados?|m2|m²|pliegos?|unidades?))/gi],
+        ['voice-finish', /(terminaci[oó]n\s*,?\s*[^,.]+(?:corte|barniz|blanco)[^,.]*)/gi]
+    ];
+    patterns.forEach(([className, pattern]) => { html = html.replace(pattern, `<mark class="${className}">$1</mark>`); });
+    return html;
+}
+
+function showVoicePreview(transcript, parsed) {
+    voiceTranscript.innerHTML = highlightTranscript(transcript);
+    voicePreview.innerHTML = `
+        <span class="voice-field voice-date"><b>Fecha</b>${escapeHtml(displayDate(parsed.fecha))}</span>
+        <span class="voice-field voice-client"><b>Cliente</b>${escapeHtml(parsed.cliente)}</span>
+        <span class="voice-field voice-work"><b>Trabajo</b>${escapeHtml(parsed.trabajo)}</span>
+        <span class="voice-field voice-measure"><b>Medida</b>${escapeHtml(parsed.medida)}</span>
+        <span class="voice-field voice-quantity"><b>Cantidad</b>${escapeHtml(parsed.cantidad)} ${escapeHtml(parsed.unidad)}</span>
+        <span class="voice-field voice-finish"><b>Terminación</b>${escapeHtml(parsed.terminacion)}</span>`;
+}
+
+function openVoiceDialog() {
+    pendingVoiceJob = null;
+    btnVoiceConfirm.disabled = true;
+    voiceTranscript.textContent = 'Escuchando…';
+    voicePreview.innerHTML = '<p class="voice-help">Habla con calma. Verás los datos detectados antes de agregarlos.</p>';
+    voiceDialog.hidden = false;
+}
+
+function closeVoiceDialog() {
+    voiceDialog.hidden = true;
+    pendingVoiceJob = null;
+}
+
+function addPendingVoiceJob() {
+    if (!pendingVoiceJob) return;
+    const { tab, job } = pendingVoiceJob;
+    state.jobs[tab].push(job);
+    queueUpsert(tab, job);
+    renderTable();
+    closeVoiceDialog();
+}
+
+btnVoiceConfirm.addEventListener('click', addPendingVoiceJob);
+btnVoiceCancel.addEventListener('click', () => {
+    voiceRecognition?.abort();
+    closeVoiceDialog();
+});
+
 if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition(); recognition.lang = 'es-CL'; recognition.continuous = false;
-    btnVoice.addEventListener('click', () => { btnVoice.classList.add('listening'); recognition.start(); });
+    const recognition = new SpeechRecognition(); voiceRecognition = recognition;
+    recognition.lang = 'es-CL'; recognition.continuous = false; recognition.interimResults = true; recognition.maxAlternatives = 1;
+    btnVoice.addEventListener('click', () => {
+        try { openVoiceDialog(); btnVoice.classList.add('listening'); recognition.start(); }
+        catch { alert('El micrófono ya está activo. Termina de hablar y vuelve a intentarlo.'); }
+    });
     recognition.onresult = event => {
-        btnVoice.classList.remove('listening'); const text = event.results[0][0].transcript.toLowerCase();
-        const cliente = (text.match(/cliente\s+([a-zá-úñ\s]+)(?=\s+\d+|$)/i)?.[1] || 'Voz (Revisar)').trim().toUpperCase();
-        const cantidad = text.match(/(\d+)/)?.[1] || '1'; const tab = state.activeTab;
+        const transcript = [...event.results].map(result => result[0].transcript).join('').trim();
+        voiceTranscript.innerHTML = highlightTranscript(transcript);
+        const latest = event.results[event.results.length - 1];
+        if (!latest.isFinal) return;
+        btnVoice.classList.remove('listening'); const tab = state.activeTab;
+        const parsed = parseVoiceJob(transcript);
         const job = tab === 'plotter'
-            ? { id: newId(), fecha: new Date().toISOString().slice(0, 10), cliente, trabajo: 'Ingresado por voz', medida: '-', cantidad, unidad: text.includes('metro') || text.includes('m2') ? 'm²' : 'Unidades', terminacion: 'BARNIZ', impreso: false, entregado: false }
-            : { id: newId(), fecha: new Date().toISOString().slice(0, 10), cliente, trabajo: 'Ingresado por voz', formato: '-', cantidad, entregado: false };
-        state.jobs[tab].push(job); queueUpsert(tab, job); renderTable();
+            ? { id: newId(), ...parsed, impreso: false, entregado: false }
+            : { id: newId(), fecha: parsed.fecha, cliente: parsed.cliente, trabajo: parsed.trabajo, formato: parsed.medida, cantidad: parsed.cantidad, entregado: false };
+        pendingVoiceJob = { tab, job };
+        showVoicePreview(transcript, parsed);
+        btnVoiceConfirm.disabled = false;
     };
-    recognition.onerror = event => { btnVoice.classList.remove('listening'); alert(`Error al escuchar: ${event.error}`); };
+    recognition.onend = () => btnVoice.classList.remove('listening');
+    recognition.onerror = event => {
+        btnVoice.classList.remove('listening');
+        if (event.error === 'aborted') return;
+        voiceTranscript.textContent = `No se pudo escuchar: ${event.error}`;
+        voicePreview.innerHTML = '<p class="voice-help">Revisa el permiso del micrófono e inténtalo nuevamente.</p>';
+    };
 } else btnVoice.style.display = 'none';
 
 loadData(); renderTable(); loadFromSheets();

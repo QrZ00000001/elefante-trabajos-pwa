@@ -35,7 +35,7 @@ body {
 
 .app-container {
     width: 100%;
-    max-width: 1400px;
+    max-width: 1760px;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
@@ -390,6 +390,41 @@ footer p {
     font-size: 0.8rem;
     color: var(--text-secondary);
 }
+
+.voice-dialog[hidden] { display: none; }
+.voice-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, .72);
+    backdrop-filter: blur(8px);
+}
+.voice-dialog-card {
+    width: min(620px, 100%);
+    padding: 24px;
+    border: 1px solid var(--glass-border);
+    border-radius: 18px;
+    background: #1c1c1e;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, .55);
+}
+.voice-eyebrow { margin-bottom: 6px; color: var(--accent-color); font-size: .72rem; font-weight: 600; letter-spacing: .1em; }
+.voice-dialog h2 { margin-bottom: 16px; font-size: 1.3rem; }
+.voice-transcript { min-height: 48px; padding: 12px; border-radius: 10px; background: rgba(255, 255, 255, .06); line-height: 1.55; }
+.voice-transcript mark { display: inline; padding: 2px 5px; border-radius: 4px; color: inherit; }
+.voice-preview { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.voice-field { display: grid; gap: 3px; padding: 9px 11px; border-radius: 9px; font-size: .86rem; }
+.voice-field b { font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
+.voice-date { background: rgba(90, 200, 250, .2); color: #a8e2ff; }
+.voice-client { background: rgba(191, 90, 242, .2); color: #e2b3ff; }
+.voice-work { background: rgba(48, 209, 88, .18); color: #a5efba; }
+.voice-measure { background: rgba(255, 159, 10, .2); color: #ffd293; }
+.voice-quantity { background: rgba(94, 92, 230, .24); color: #c4c3ff; }
+.voice-finish { background: rgba(255, 69, 58, .2); color: #ffb0aa; }
+.voice-help { width: 100%; color: var(--text-secondary); font-size: .9rem; }
+.voice-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
 /* Diseño de captura para teléfonos: acciones primero, filtros verticales y trabajos en tarjetas. */
 @media (max-width: 720px) {
