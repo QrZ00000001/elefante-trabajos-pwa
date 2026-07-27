@@ -283,6 +283,11 @@ const btnVoiceConfirm = document.getElementById('btn-voice-confirm');
 const btnVoiceCancel = document.getElementById('btn-voice-cancel');
 let pendingVoiceJob = null;
 let voiceRecognition = null;
+let voiceSessionActive = false;
+let voiceFinalizeTimer = null;
+let voiceFinalChunks = [];
+let voiceInterimChunk = '';
+let voiceStream = null;
 
 function normalizeVoiceText(text) {
     return text.toLocaleLowerCase('es-CL').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\bmas\b/g, '+');
@@ -357,13 +362,17 @@ function openVoiceDialog() {
     pendingVoiceJob = null;
     btnVoiceConfirm.disabled = true;
     voiceTranscript.textContent = 'Escuchando…';
-    voicePreview.innerHTML = '<p class="voice-help">Habla con calma. Verás los datos detectados antes de agregarlos.</p>';
+    voicePreview.innerHTML = '<p class="voice-help">Habla la frase completa. La app esperará un breve silencio antes de mostrar la vista previa.</p>';
     voiceDialog.hidden = false;
 }
 
 function closeVoiceDialog() {
     voiceDialog.hidden = true;
     pendingVoiceJob = null;
+    voiceSessionActive = false;
+    clearTimeout(voiceFinalizeTimer);
+    voiceStream?.getTracks().forEach(track => track.stop());
+    voiceStream = null;
 }
 
 function addPendingVoiceJob() {
@@ -384,17 +393,49 @@ btnVoiceCancel.addEventListener('click', () => {
 if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition(); voiceRecognition = recognition;
-    recognition.lang = 'es-CL'; recognition.continuous = false; recognition.interimResults = true; recognition.maxAlternatives = 1;
-    btnVoice.addEventListener('click', () => {
-        try { openVoiceDialog(); btnVoice.classList.add('listening'); recognition.start(); }
-        catch { alert('El micrófono ya está activo. Termina de hablar y vuelve a intentarlo.'); }
-    });
-    recognition.onresult = event => {
-        const transcript = [...event.results].map(result => result[0].transcript).join('').trim();
-        voiceTranscript.innerHTML = highlightTranscript(transcript);
-        const latest = event.results[event.results.length - 1];
-        if (!latest.isFinal) return;
-        btnVoice.classList.remove('listening'); const tab = state.activeTab;
+    recognition.lang = 'es-CL'; recognition.continuous = true; recognition.interimResults = true; recognition.maxAlternatives = 1;
+
+    function transcriptSoFar() {
+        return [...voiceFinalChunks, voiceInterimChunk].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function startRecognition() {
+        if (!voiceSessionActive) return;
+        try {
+            const track = voiceStream?.getAudioTracks()[0];
+            if (track) {
+                try { recognition.start(track); return; }
+                catch { /* Navegadores que no admiten pasar una pista de audio. */ }
+            }
+            recognition.start();
+        }
+        catch { /* El navegador puede mantener el reconocimiento activo mientras reinicia. */ }
+    }
+
+    async function beginVoiceSession() {
+        openVoiceDialog();
+        voiceSessionActive = true;
+        voiceFinalChunks = [];
+        voiceInterimChunk = '';
+        clearTimeout(voiceFinalizeTimer);
+        btnVoice.classList.add('listening');
+        try {
+            voiceStream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+            });
+        } catch {
+            voicePreview.innerHTML = '<p class="voice-help">No se pudo aplicar la mejora de audio. Se usará el micrófono normal del navegador.</p>';
+        }
+        startRecognition();
+    }
+
+    function finalizeVoiceSession() {
+        const transcript = transcriptSoFar();
+        if (!voiceSessionActive || !transcript) return;
+        voiceSessionActive = false;
+        recognition.abort();
+        btnVoice.classList.remove('listening');
+        const tab = state.activeTab;
         const parsed = parseVoiceJob(transcript);
         const job = tab === 'plotter'
             ? { id: newId(), ...parsed, impreso: false, entregado: false }
@@ -402,11 +443,39 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         pendingVoiceJob = { tab, job };
         showVoicePreview(transcript, parsed);
         btnVoiceConfirm.disabled = false;
+        voiceStream?.getTracks().forEach(track => track.stop());
+        voiceStream = null;
+    }
+
+    function scheduleVoiceFinalize() {
+        clearTimeout(voiceFinalizeTimer);
+        voiceFinalizeTimer = setTimeout(finalizeVoiceSession, 2200);
+    }
+
+    btnVoice.addEventListener('click', () => {
+        if (!voiceSessionActive) beginVoiceSession();
+    });
+    recognition.onresult = event => {
+        voiceInterimChunk = '';
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+            const result = event.results[index];
+            if (result.isFinal) voiceFinalChunks.push(result[0].transcript);
+            else voiceInterimChunk += result[0].transcript;
+        }
+        const transcript = transcriptSoFar();
+        voiceTranscript.innerHTML = highlightTranscript(transcript);
+        scheduleVoiceFinalize();
     };
-    recognition.onend = () => btnVoice.classList.remove('listening');
+    recognition.onend = () => {
+        if (!voiceSessionActive) { btnVoice.classList.remove('listening'); return; }
+        // Algunos navegadores cortan una frase tras una pausa breve; se retoma sin perder lo ya escuchado.
+        setTimeout(startRecognition, 150);
+    };
     recognition.onerror = event => {
         btnVoice.classList.remove('listening');
         if (event.error === 'aborted') return;
+        if (event.error === 'no-speech' && voiceSessionActive) { setTimeout(startRecognition, 150); return; }
+        voiceSessionActive = false;
         voiceTranscript.textContent = `No se pudo escuchar: ${event.error}`;
         voicePreview.innerHTML = '<p class="voice-help">Revisa el permiso del micrófono e inténtalo nuevamente.</p>';
     };
