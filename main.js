@@ -287,7 +287,6 @@ let voiceSessionActive = false;
 let voiceFinalizeTimer = null;
 let voiceFinalChunks = [];
 let voiceInterimChunk = '';
-let voiceStream = null;
 
 function normalizeVoiceText(text) {
     return text.toLocaleLowerCase('es-CL').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\bmas\b/g, '+');
@@ -371,8 +370,6 @@ function closeVoiceDialog() {
     pendingVoiceJob = null;
     voiceSessionActive = false;
     clearTimeout(voiceFinalizeTimer);
-    voiceStream?.getTracks().forEach(track => track.stop());
-    voiceStream = null;
 }
 
 function addPendingVoiceJob() {
@@ -401,14 +398,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
 
     function startRecognition() {
         if (!voiceSessionActive) return;
-        try {
-            const track = voiceStream?.getAudioTracks()[0];
-            if (track) {
-                try { recognition.start(track); return; }
-                catch { /* Navegadores que no admiten pasar una pista de audio. */ }
-            }
-            recognition.start();
-        }
+        try { recognition.start(); }
         catch { /* El navegador puede mantener el reconocimiento activo mientras reinicia. */ }
     }
 
@@ -419,13 +409,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         voiceInterimChunk = '';
         clearTimeout(voiceFinalizeTimer);
         btnVoice.classList.add('listening');
-        try {
-            voiceStream = await navigator.mediaDevices.getUserMedia({
-                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-            });
-        } catch {
-            voicePreview.innerHTML = '<p class="voice-help">No se pudo aplicar la mejora de audio. Se usará el micrófono normal del navegador.</p>';
-        }
+        voicePreview.innerHTML = '<p class="voice-help">Escuchando con el micrófono del navegador. Habla la frase completa y espera un momento al terminar.</p>';
         startRecognition();
     }
 
@@ -443,8 +427,6 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         pendingVoiceJob = { tab, job };
         showVoicePreview(transcript, parsed);
         btnVoiceConfirm.disabled = false;
-        voiceStream?.getTracks().forEach(track => track.stop());
-        voiceStream = null;
     }
 
     function scheduleVoiceFinalize() {
@@ -470,6 +452,12 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         if (!voiceSessionActive) { btnVoice.classList.remove('listening'); return; }
         // Algunos navegadores cortan una frase tras una pausa breve; se retoma sin perder lo ya escuchado.
         setTimeout(startRecognition, 150);
+    };
+    recognition.onstart = () => {
+        voiceTranscript.textContent = 'Micrófono listo. Te estoy escuchando…';
+    };
+    recognition.onspeechstart = () => {
+        voicePreview.innerHTML = '<p class="voice-help">Voz detectada. Sigue con cliente, trabajo, medida, cantidad y terminación.</p>';
     };
     recognition.onerror = event => {
         btnVoice.classList.remove('listening');
