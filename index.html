@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0071e3">
+    <title>Trabajos del Mes | Elefante Difusión</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- PWA Settings -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TrabajosMes">
+    <link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <span class="sf-icon">📊</span>
+                <h1>Trabajos del Mes</h1>
+            </div>
+            <div class="header-controls">
+                <div class="segmented-control">
+                    <input type="radio" name="tab" id="tab-plotter" value="plotter" checked>
+                    <label for="tab-plotter">Impresión / Plotter</label>
+                    <input type="radio" name="tab" id="tab-digital" value="digital">
+                    <label for="tab-digital">Trabajos Digitales</label>
+                    <div class="selection-slider"></div>
+                </div>
+                <div class="header-actions">
+                    <button id="btn-voice" class="btn-voice" title="Comando de voz">🎤</button>
+                    <button id="btn-add-row" class="btn-primary">+ Añadir Trabajo</button>
+                    <button id="btn-sync" class="btn-secondary">Sincronizar a Sheets</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="glass-panel table-container">
+            <section class="filters" aria-label="Filtros de trabajos">
+                <input id="filter-search" type="search" placeholder="Buscar cliente o trabajo">
+                <select id="filter-client" class="native-filter-select"><option value="">Todos los clientes</option></select>
+                <div class="custom-filter-select" data-filter="filter-client"><button type="button"></button><div class="custom-filter-menu"></div></div>
+                <select id="filter-machine" class="native-filter-select"><option value="">Todas las máquinas</option></select>
+                <div class="custom-filter-select" data-filter="filter-machine"><button type="button"></button><div class="custom-filter-menu"></div></div>
+                <select id="filter-status" class="native-filter-select">
+                    <option value="">Todos los estados</option>
+                    <option value="pending">Pendiente</option>
+                    <option value="printed">Impreso</option>
+                    <option value="delivered">Entregado</option>
+                    <option value="overdue">Atrasado</option>
+                </select>
+                <div class="custom-filter-select" data-filter="filter-status"><button type="button"></button><div class="custom-filter-menu"></div></div>
+                <label class="filter-date-label">Mes <input id="filter-month" type="month"></label>
+                <label class="filter-date-label">Día <input id="filter-date" type="date"></label>
+                <button id="btn-clear-filters" class="btn-secondary" type="button">Limpiar filtros</button>
+            </section>
+            <p id="filter-summary" class="filter-summary" aria-live="polite"></p>
+            <!-- Pestaña Plotter -->
+            <div id="view-plotter" class="tab-content active">
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th class="col-fecha">FECHA</th>
+                                <th class="col-cliente">CLIENTE</th>
+                                <th class="col-trabajo">TRABAJO</th>
+                                <th class="col-medida">MEDIDA ARCHIVO</th>
+                                <th class="col-cantidad">CANTIDAD</th>
+                                <th class="col-unidad">UNIDAD</th>
+                                <th class="col-terminacion">TERMINACION</th>
+                                <th class="col-maquina">MAQUINA</th>
+                                <th class="col-checkbox">IMPRESO</th>
+                                <th class="col-checkbox">ENTREGADO</th>
+                                <th class="col-acciones"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-plotter">
+                            <!-- Filas dinámicas -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pestaña Digital -->
+            <div id="view-digital" class="tab-content">
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th class="col-fecha">FECHA</th>
+                                <th class="col-cliente">CLIENTE</th>
+                                <th class="col-trabajo">TRABAJO</th>
+                                <th class="col-medida">FORMATO/PLATAFORMA</th>
+                                <th class="col-cantidad">CANTIDAD</th>
+                                <th class="col-checkbox">ENTREGADO</th>
+                                <th class="col-acciones"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-digital">
+                            <!-- Filas dinámicas -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>&copy; 2024 Elefante Difusión. Sistema web.</p>
+        </footer>
+    </div>
+
+    <script src="main.js"></script>
+    <script>
+        // Registrar Service Worker para PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
