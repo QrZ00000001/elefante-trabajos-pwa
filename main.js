@@ -13,7 +13,7 @@ const btnAdd = document.getElementById('btn-add-row');
 const btnSync = document.getElementById('btn-sync');
 const filters = {
     search: document.getElementById('filter-search'), client: document.getElementById('filter-client'),
-    machine: document.getElementById('filter-machine'), status: document.getElementById('filter-status'),
+    status: document.getElementById('filter-status'),
     month: document.getElementById('filter-month'), date: document.getElementById('filter-date')
 };
 const filterSummary = document.getElementById('filter-summary');
@@ -136,10 +136,9 @@ function escapeHtml(value) {
 }
 function jobMatches(job) {
     const search = filters.search.value.trim().toLocaleLowerCase();
-    const haystack = `${job.cliente} ${job.trabajo} ${job.medida || job.formato || ''} ${job.maquina || ''}`.toLocaleLowerCase();
+    const haystack = `${job.cliente} ${job.trabajo} ${job.medida || job.formato || ''}`.toLocaleLowerCase();
     return (!search || haystack.includes(search))
         && (!filters.client.value || job.cliente === filters.client.value)
-        && (!filters.machine.value || job.maquina === filters.machine.value)
         && (!filters.status.value || statusOf(job) === filters.status.value)
         && (!filters.month.value || monthKey(job.fecha) === filters.month.value)
         && (!filters.date.value || dateKey(job.fecha) === filters.date.value);
@@ -147,13 +146,10 @@ function jobMatches(job) {
 
 function updateFilterOptions() {
     const jobs = state.jobs[state.activeTab];
-    const selectedClient = filters.client.value, selectedMachine = filters.machine.value;
+    const selectedClient = filters.client.value;
     const clients = [...new Set(jobs.map(job => job.cliente).filter(Boolean))].sort();
-    const machines = [...new Set(jobs.map(job => job.maquina).filter(Boolean))].sort();
     filters.client.innerHTML = '<option value="">Todos los clientes</option>' + clients.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
-    filters.machine.innerHTML = '<option value="">Todas las máquinas</option>' + machines.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
     if (clients.includes(selectedClient)) filters.client.value = selectedClient;
-    if (machines.includes(selectedMachine)) filters.machine.value = selectedMachine;
     renderCustomFilterSelects();
 }
 
@@ -206,8 +202,17 @@ function renderTable() {
                 <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'medida', this.innerText)">${escapeHtml(job.medida)}</div></td>
                 <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'cantidad', this.innerText)">${escapeHtml(job.cantidad)}</div></td>
                 <td><select class="table-select" onchange="updateField('${tab}', ${index}, 'unidad', this.value)"><option value="Pliegos" ${job.unidad === 'Pliegos' ? 'selected' : ''}>Pliegos</option><option value="m²" ${job.unidad === 'm²' ? 'selected' : ''}>m²</option><option value="Unidades" ${job.unidad === 'Unidades' ? 'selected' : ''}>Unidades</option></select></td>
-                <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'terminacion', this.innerText)">${escapeHtml(job.terminacion)}</div></td>
-                <td><div class="editable" contenteditable="true" onblur="updateField('${tab}', ${index}, 'maquina', this.innerText)">${escapeHtml(job.maquina)}</div></td>
+                <td><select class="table-select" onchange="updateField('${tab}', ${index}, 'terminacion', this.value)">
+                    <option value="BARNIZ" ${job.terminacion === 'BARNIZ' ? 'selected' : ''}>BARNIZ</option>
+                    <option value="BARNIZ + MEDIO CORTE" ${job.terminacion === 'BARNIZ + MEDIO CORTE' ? 'selected' : ''}>BARNIZ + MEDIO CORTE</option>
+                    <option value="BARNIZ + DOBLE CORTE" ${job.terminacion === 'BARNIZ + DOBLE CORTE' ? 'selected' : ''}>BARNIZ + DOBLE CORTE</option>
+                    <option value="BLANCO" ${job.terminacion === 'BLANCO' ? 'selected' : ''}>BLANCO</option>
+                    <option value="BLANCO + BARNIZ" ${job.terminacion === 'BLANCO + BARNIZ' ? 'selected' : ''}>BLANCO + BARNIZ</option>
+                    <option value="BLANCO + MEDIO CORTE" ${job.terminacion === 'BLANCO + MEDIO CORTE' ? 'selected' : ''}>BLANCO + MEDIO CORTE</option>
+                    <option value="BLANCO + DOBLE CORTE" ${job.terminacion === 'BLANCO + DOBLE CORTE' ? 'selected' : ''}>BLANCO + DOBLE CORTE</option>
+                    <option value="BLANCO + BARNIZ + MEDIO CORTE" ${job.terminacion === 'BLANCO + BARNIZ + MEDIO CORTE' ? 'selected' : ''}>BLANCO + BARNIZ + MEDIO CORTE</option>
+                    <option value="BLANCO + BARNIZ + DOBLE CORTE" ${job.terminacion === 'BLANCO + BARNIZ + DOBLE CORTE' ? 'selected' : ''}>BLANCO + BARNIZ + DOBLE CORTE</option>
+                </select></td>
                 <td><div class="custom-checkbox ${job.impreso ? 'checked' : ''}" onclick="toggleCheck('${tab}', ${index}, 'impreso')"></div></td>
                 <td><div class="custom-checkbox ${job.entregado ? 'checked' : ''}" onclick="toggleCheck('${tab}', ${index}, 'entregado')"></div></td>
                 <td>${badge}<button class="btn-icon" title="Eliminar trabajo" onclick="deleteRow('${tab}', ${index})">🗑</button></td>`;
@@ -222,7 +227,7 @@ function renderTable() {
                 <td>${badge}<button class="btn-icon" title="Eliminar trabajo" onclick="deleteRow('${tab}', ${index})">🗑</button></td>`;
         }
         const labels = tab === 'plotter'
-            ? ['Fecha', 'Cliente', 'Trabajo', 'Medida', 'Cantidad', 'Unidad', 'Terminación', 'Máquina', 'Impreso', 'Entregado', 'Estado']
+            ? ['Fecha', 'Cliente', 'Trabajo', 'Medida', 'Cantidad', 'Unidad', 'Terminación', 'Impreso', 'Entregado', 'Estado']
             : ['Fecha', 'Cliente', 'Trabajo', 'Formato', 'Cantidad', 'Entregado', 'Estado'];
         tr.querySelectorAll('td').forEach((cell, cellIndex) => { cell.dataset.label = labels[cellIndex]; });
         tbody.appendChild(tr);
@@ -248,7 +253,7 @@ document.getElementById('btn-clear-filters').addEventListener('click', () => { O
 btnAdd.addEventListener('click', () => {
     const tab = state.activeTab, fecha = new Date().toISOString().slice(0, 10);
     const job = tab === 'plotter'
-        ? { id: newId(), fecha, cliente: 'Nuevo', trabajo: '-', medida: '-', cantidad: '1', unidad: 'Unidades', terminacion: '-', maquina: '-', impreso: false, entregado: false }
+        ? { id: newId(), fecha, cliente: 'Nuevo', trabajo: '-', medida: '-', cantidad: '1', unidad: 'Unidades', terminacion: 'BARNIZ', impreso: false, entregado: false }
         : { id: newId(), fecha, cliente: 'Nuevo', trabajo: '-', formato: '-', cantidad: '1', entregado: false };
     state.jobs[tab].push(job); queueUpsert(tab, job); renderTable();
 });
@@ -264,7 +269,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const cliente = (text.match(/cliente\s+([a-zá-úñ\s]+)(?=\s+\d+|$)/i)?.[1] || 'Voz (Revisar)').trim().toUpperCase();
         const cantidad = text.match(/(\d+)/)?.[1] || '1'; const tab = state.activeTab;
         const job = tab === 'plotter'
-            ? { id: newId(), fecha: new Date().toISOString().slice(0, 10), cliente, trabajo: 'Ingresado por voz', medida: '-', cantidad, unidad: text.includes('metro') || text.includes('m2') ? 'm²' : 'Unidades', terminacion: '-', maquina: '-', impreso: false, entregado: false }
+            ? { id: newId(), fecha: new Date().toISOString().slice(0, 10), cliente, trabajo: 'Ingresado por voz', medida: '-', cantidad, unidad: text.includes('metro') || text.includes('m2') ? 'm²' : 'Unidades', terminacion: 'BARNIZ', impreso: false, entregado: false }
             : { id: newId(), fecha: new Date().toISOString().slice(0, 10), cliente, trabajo: 'Ingresado por voz', formato: '-', cantidad, entregado: false };
         state.jobs[tab].push(job); queueUpsert(tab, job); renderTable();
     };

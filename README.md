@@ -9,8 +9,8 @@ Aplicación web progresiva para registrar, organizar y consultar los trabajos de
 - Registro de trabajos para Impresión / Plotter y Trabajos Digitales.
 - Edición directa de fecha, cliente, trabajo, medida, cantidad y terminaciones.
 - Estados de producción: pendiente, impreso, entregado y atrasado.
-- Búsqueda por cliente, trabajo, medida o máquina.
-- Filtros por cliente, máquina, estado, mes y día.
+- Búsqueda por cliente, trabajo o medida.
+- Filtros por cliente, estado, mes y día.
 - Historial mensual para separar y consultar períodos de trabajo.
 - Sincronización automática por cada trabajo con Google Sheets.
 - Cola local de cambios pendientes cuando no hay conexión a internet.
